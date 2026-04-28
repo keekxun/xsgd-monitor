@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XSGD/USDC Price Monitor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #1a1a2e;
+      color: #eee;
+      font-family: 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.7rem;
+      letter-spacing: 3px;
+      color: #e94560;
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+
+    /* SGD/USD card */
+    .fx-card {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 12px;
+      padding: 1.2rem 1.8rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .fx-label {
+      font-size: 0.85rem;
+      color: #888;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .fx-value {
+      font-size: 2rem;
+      font-weight: bold;
+      color: #a8dadc;
+      letter-spacing: 1px;
+    }
+
+    .fx-date {
+      font-size: 0.8rem;
+      color: #555;
+      margin-left: auto;
+    }
+
+    .fx-error { color: #e94560; font-size: 0.9rem; }
+
+    /* Alert banner */
+    .alert-banner {
+      background: #3d0a14;
+      border: 1px solid #e94560;
+      border-radius: 8px;
+      padding: 0.9rem 1.4rem;
+      margin-bottom: 1rem;
+      display: none;
+      align-items: center;
+      gap: 1rem;
+      animation: flashIn 0.3s ease;
+    }
+
+    .alert-banner.active { display: flex; }
+
+    .alert-icon { font-size: 1.3rem; }
+
+    .alert-text { flex: 1; font-size: 0.95rem; }
+
+    .alert-detail { font-size: 0.8rem; color: #f87; margin-top: 0.2rem; }
+
+    @keyframes flashIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Controls */
+    .controls {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      margin-bottom: 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+    }
+
+    .control-group label {
+      font-size: 0.85rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 140px;
+      height: 4px;
+      background: #0f3460;
+      border-radius: 2px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #e94560;
+      cursor: pointer;
+    }
+
+    .threshold-val {
+      font-size: 0.95rem;
+      color: #e94560;
+      font-weight: bold;
+      min-width: 56px;
+    }
+
+    select {
+      background: #0f3460;
+      color: #eee;
+      border: 1px solid #1a4a80;
+      border-radius: 6px;
+      padding: 0.3rem 0.6rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    /* Table */
+    .table-wrapper {
+      overflow-x: auto;
+      border-radius: 12px;
+      border: 1px solid #0f3460;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #16213e;
+    }
+
+    thead th {
+      background: #0f3460;
+      padding: 0.75rem 1rem;
+      text-align: left;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #a8dadc;
+      white-space: nowrap;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid #0f3460;
+      transition: background 0.15s;
+    }
+
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #1d2e50; }
+
+    tbody td {
+      padding: 0.75rem 1rem;
+      font-size: 0.9rem;
+      white-space: nowrap;
+    }
+
+    .type-cex { color: #e94560; font-weight: 600; }
+    .type-dex { color: #a8dadc; font-weight: 600; }
+
+    .chain-base   { color: #4fc3f7; }
+    .chain-polygon { color: #9b59b6; }
+    .chain-avalanche { color: #e74c3c; }
+
+    .price-val { font-family: monospace; font-size: 1rem; font-weight: bold; }
+
+    .row-max { background: rgba(46, 204, 113, 0.08) !important; }
+    .row-min { background: rgba(231, 76, 60, 0.08) !important; }
+
+    .price-max { color: #2ecc71; }
+    .price-min { color: #e74c3c; }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.65rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      margin-left: 4px;
+      vertical-align: middle;
+    }
+
+    .badge-high { background: #1a4a2e; color: #2ecc71; }
+    .badge-low  { background: #4a1a1a; color: #e74c3c; }
+    .badge-stale { background: #3a3a1a; color: #f0c040; }
+
+    .volume { color: #777; font-size: 0.82rem; }
+
+    .row-stale { opacity: 0.4; }
+    .row-stale:hover { opacity: 0.6; }
+
+    .dev-high { color: #e74c3c; font-family: monospace; font-weight: bold; }
+    .dev-low  { color: #e74c3c; font-family: monospace; font-weight: bold; }
+
+    .loading-row td { text-align: center; color: #555; padding: 2rem; }
+
+    .error-row td { text-align: center; color: #e94560; padding: 2rem; font-size: 0.9rem; }
+
+    /* Footer */
+    .footer {
+      margin-top: 0.9rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.78rem;
+      color: #555;
+      padding: 0 0.2rem;
+    }
+
+    .countdown { color: #0f3460; }
+    .countdown.soon { color: #a8dadc; }
+
+    .spread-summary {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      padding: 0.7rem 1.2rem;
+      margin-bottom: 1rem;
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+      font-size: 0.85rem;
+      color: #888;
+    }
+
+    .spread-summary span b { color: #eee; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>XSGD / USDC PRICE MONITOR</h1>
+
+  <!-- SGD/USD FX rate -->
+  <div class="fx-card">
+    <div>
+      <div class="fx-label">1 SGD = ? USD</div>
+      <div class="fx-value" id="fx-value">—</div>
+    </div>
+    <div class="fx-date" id="fx-date"></div>
+  </div>
+
+  <!-- Cross-venue spread alert -->
+  <div class="alert-banner" id="alert-banner">
+    <div class="alert-icon">⚠</div>
+    <div>
+      <div class="alert-text" id="alert-text"></div>
+      <div class="alert-detail" id="alert-detail"></div>
+    </div>
+  </div>
+
+  <!-- Spot deviation alert -->
+  <div class="alert-banner" id="spot-alert-banner">
+    <div class="alert-icon">📍</div>
+    <div>
+      <div class="alert-text" id="spot-alert-text"></div>
+      <div class="alert-detail" id="spot-alert-detail"></div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="control-group">
+      <label>Cross-venue Spread</label>
+      <input type="range" id="threshold-slider" min="1" max="100" value="20">
+      <span class="threshold-val" id="threshold-val">20 bps</span>
+    </div>
+    <div class="control-group">
+      <label>Spot Deviation</label>
+      <input type="range" id="spot-threshold-slider" min="1" max="100" value="20">
+      <span class="threshold-val" id="spot-threshold-val">20 bps</span>
+    </div>
+    <div class="control-group">
+      <label>Refresh Every</label>
+      <select id="refresh-select">
+        <option value="15">15 s</option>
+        <option value="30" selected>30 s</option>
+        <option value="60">60 s</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Spread summary -->
+  <div class="spread-summary" id="spread-summary" style="display:none">
+    <span>Max Price: <b id="sum-max">—</b></span>
+    <span>Min Price: <b id="sum-min">—</b></span>
+    <span>Spread: <b id="sum-spread">—</b></span>
+  </div>
+
+  <!-- Price table -->
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Exchange</th>
+          <th>Chain</th>
+          <th>Type</th>
+          <th>Price (USDC)</th>
+          <th>vs Spot</th>
+          <th>24h Volume</th>
+        </tr>
+      </thead>
+      <tbody id="table-body">
+        <tr class="loading-row"><td colspan="6">Fetching data…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span id="last-updated"></span>
+    <span class="countdown" id="countdown"></span>
+  </div>
+</div>
+
+<script>
+  const COINGECKO_URL = 'https://api.coingecko.com/api/v3/coins/xsgd/tickers?depth=false&include_exchange_logo=false';
+  const OANDA_TOKEN = '3eb69a25e2d332bfa94fb0b86e412d14-82b980708806f6549858fa908ae62223';
+  const FX_URL = 'https://api-fxpractice.oanda.com/v3/instruments/USD_SGD/candles?count=1&granularity=S5&price=M';
+
+  // ── Token contract addresses (lowercase) ──────────────────────────────────
+  const XSGD_ADDRS = new Set([
+    '0xdc3326e71d45186f113a2f448984ca0e8d201995', // Polygon
+    '0x0a4c9cb2778ab3302996a34befcf9a8bc288c33b', // Base
+    '0xb2f85b7ab3c2b6f62df06de6ae7d09c010a5096e', // Avalanche
+    '0x70e8de73ce538da2beed35d14187f6959a8eca96', // Ethereum
+  ]);
+
+  const USDC_ADDRS = new Set([
+    '0x2791bca1f2de4661ed88a30c99a7a9449aa84174', // USDC.e Polygon
+    '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359', // USDC Polygon
+    '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', // USDC Base
+    '0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e', // USDC Avalanche
+  ]);
+
+  // ── Exchange identity map ──────────────────────────────────────────────────
+  const CEX_IDS = new Set(['gdax', 'coinbase', 'coinbase_advanced', 'coinbase_advanced_trade', 'coinbase_exchange']);
+
+  const KNOWN_DEX = {
+    'aerodrome-slipstream':           { name: 'Aerodrome SlipStream', chain: 'Base' },
+    'aerodrome_slipstream':           { name: 'Aerodrome SlipStream', chain: 'Base' },
+    'uniswap_v3_polygon_pos':         { name: 'Uniswap V3',           chain: 'Polygon' },
+    'uniswap-v3-polygon':             { name: 'Uniswap V3',           chain: 'Polygon' },
+    'uniswap-v3-avalanche':           { name: 'Uniswap V3',           chain: 'Avalanche' },
+    'uniswap_v3_avalanche':           { name: 'Uniswap V3',           chain: 'Avalanche' },
+    'uniswap-v3-base':                { name: 'Uniswap V3',           chain: 'Base' },
+    'uniswap_v3_base':                { name: 'Uniswap V3',           chain: 'Base' },
+    'pharaoh-exchange-v1':            { name: 'Pharaoh Exchange',      chain: 'Avalanche' },
+    'pharaoh-exchange-v2':            { name: 'Pharaoh Exchange',      chain: 'Avalanche' },
+    'pharaoh-exchange-v3':            { name: 'Pharaoh Exchange V3',   chain: 'Avalanche' },
+    'pharaoh_exchange':               { name: 'Pharaoh Exchange',      chain: 'Avalanche' },
+    'pancakeswap-infinity-clmm-base': { name: 'PancakeSwap Infinity',  chain: 'Base' },
+    'pancakeswap_new':                { name: 'PancakeSwap Infinity',  chain: 'Base' },
+    'quickswap_v3':                   { name: 'QuickSwap V3',          chain: 'Polygon' },
+    'quickswap-v3':                   { name: 'QuickSwap V3',          chain: 'Polygon' },
+  };
+
+  const TARGET_CHAINS = new Set(['Base', 'Polygon', 'Avalanche']);
+
+  function detectChain(url) {
+    if (!url) return null;
+    const u = url.toLowerCase();
+    if (u.includes('polygon')   || u.includes('/137/')   || u.includes('chain=137'))   return 'Polygon';
+    if (u.includes('avalanche') || u.includes('/43114/') || u.includes('chain=43114') || u.includes('avax')) return 'Avalanche';
+    if (u.includes('/base')     || u.includes('base.org') || u.includes('/8453/')  || u.includes('chain=8453') || u.includes('aerodrome')) return 'Base';
+    return null;
+  }
+
+  function resolveExchange(ticker) {
+    const id  = (ticker.market.identifier || '').toLowerCase();
+    const url = ticker.trade_url || ticker.token_info_url || '';
+
+    if (CEX_IDS.has(id) || id.startsWith('coinbase')) {
+      return { name: 'Coinbase', chain: '—', type: 'CEX' };
+    }
+    if (KNOWN_DEX[id]) {
+      return { ...KNOWN_DEX[id], type: 'DEX' };
+    }
+    // Fallback: detect chain from URL for any Uniswap or unknown DEX
+    const chain = detectChain(url);
+    if (chain && TARGET_CHAINS.has(chain)) {
+      const name = id.includes('uniswap') ? 'Uniswap V3' : ticker.market.name;
+      return { name, chain, type: 'DEX' };
+    }
+    return null;
+  }
+
+  function getPrice(ticker) {
+    const b = (ticker.base   || '').toLowerCase();
+    const t = (ticker.target || '').toLowerCase();
+    const bIsXsgd = b === 'xsgd' || XSGD_ADDRS.has(b);
+    const tIsXsgd = t === 'xsgd' || XSGD_ADDRS.has(t);
+    const bIsUsdc = b === 'usdc' || b === 'usd' || USDC_ADDRS.has(b);
+    const tIsUsdc = t === 'usdc' || t === 'usd' || USDC_ADDRS.has(t);
+    if (bIsXsgd && tIsUsdc) return ticker.last;
+    if (tIsXsgd && bIsUsdc && ticker.last > 0) return 1 / ticker.last;
+    return null; // Not an XSGD/USDC pair — skip
+  }
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let threshold       = 20;  // bps (cross-venue spread)
+  let spotThreshold   = 20;  // bps (deviation from spot)
+  let spotRate        = null;
+  let refreshSecs     = 30;
+  let countdownLeft   = 30;
+  let countdownHandle = null;
+  let refreshHandle   = null;
+  let lastRows        = [];
+  let notifGranted    = false;
+  let audioCtx        = null;
+
+  // ── Audio ──────────────────────────────────────────────────────────────────
+  function beep() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc  = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+      osc.start(audioCtx.currentTime);
+      osc.stop(audioCtx.currentTime + 0.6);
+    } catch (_) {}
+  }
+
+  // ── Notifications ──────────────────────────────────────────────────────────
+  async function requestNotifPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted') { notifGranted = true; return; }
+    if (Notification.permission !== 'denied') {
+      const r = await Notification.requestPermission();
+      notifGranted = r === 'granted';
+    }
+  }
+
+  function sendNotif(title, body) {
+    if (notifGranted) new Notification(title, { body, icon: '' });
+  }
+
+  // ── Fetch FX ───────────────────────────────────────────────────────────────
+  async function fetchFX() {
+    try {
+      const res  = await fetch(FX_URL, {
+        headers: { 'Authorization': `Bearer ${OANDA_TOKEN}` }
+      });
+      const data = await res.json();
+      const candle = data.candles?.[0];
+      if (candle) {
+        const usdSgd = parseFloat(candle.mid.c); // close mid of USD_SGD
+        const sgdUsd = 1 / usdSgd;               // invert → SGD/USD
+        spotRate = sgdUsd;
+        document.getElementById('fx-value').textContent = sgdUsd.toFixed(4);
+        const ts = candle.time ? new Date(candle.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        document.getElementById('fx-date').textContent = `Oanda live · ${ts}`;
+      }
+    } catch (e) {
+      document.getElementById('fx-value').innerHTML = '<span class="fx-error">Unavailable</span>';
+    }
+  }
+
+  // ── Fetch tickers ──────────────────────────────────────────────────────────
+  async function fetchTickers() {
+    const res  = await fetch(COINGECKO_URL);
+    if (!res.ok) throw new Error(`CoinGecko ${res.status}`);
+    const data = await res.json();
+    const tickers = data.tickers || [];
+
+    // Log raw data for debugging
+    console.log('[XSGD Monitor] Raw tickers:', tickers);
+
+    // Deduplicate by (exchange name + chain)
+    const seen = new Map();
+    const rows = [];
+
+    for (const t of tickers) {
+      const exch  = resolveExchange(t);
+      if (!exch) continue;
+      if (exch.type === 'DEX' && !TARGET_CHAINS.has(exch.chain)) continue;
+
+      const price = getPrice(t);
+      if (price === null || price <= 0) continue;
+
+      const key = `${exch.name}|${exch.chain}`;
+      if (seen.has(key)) {
+        // Keep the entry with higher volume
+        if ((t.volume || 0) > seen.get(key).volume) {
+          seen.get(key).price  = price;
+          seen.get(key).volume = t.volume || 0;
+          seen.get(key).stale  = t.is_stale;
+        }
+        continue;
+      }
+
+      const row = { ...exch, price, volume: t.volume || 0, stale: t.is_stale };
+      seen.set(key, row);
+      rows.push(row);
+    }
+
+    return rows;
+  }
+
+  // ── Render table ───────────────────────────────────────────────────────────
+  function chainClass(chain) {
+    if (chain === 'Base')      return 'chain-base';
+    if (chain === 'Polygon')   return 'chain-polygon';
+    if (chain === 'Avalanche') return 'chain-avalanche';
+    return '';
+  }
+
+  function fmtVol(v) {
+    if (!v || v === 0) return '—';
+    if (v >= 1e6) return `$${(v/1e6).toFixed(2)}M`;
+    if (v >= 1e3) return `$${(v/1e3).toFixed(1)}K`;
+    return `$${v.toFixed(0)}`;
+  }
+
+  function renderTable(rows) {
+    const tbody = document.getElementById('table-body');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr class="error-row"><td colspan="6">No matching pairs found. Check console for raw data.</td></tr>';
+      document.getElementById('spread-summary').style.display = 'none';
+      return;
+    }
+
+    const active = rows.filter(r => !r.stale);
+    const stale  = rows.filter(r => r.stale);
+
+    const prices    = active.map(r => r.price);
+    const maxP      = prices.length ? Math.max(...prices) : 0;
+    const minP      = prices.length ? Math.min(...prices) : 0;
+    const spreadBps = minP > 0 ? ((maxP - minP) / minP) * 10000 : 0;
+
+    active.sort((a, b) => b.price - a.price);
+
+    const activeRows = active.map(r => {
+      const isMax    = r.price === maxP;
+      const isMin    = r.price === minP && active.length > 1;
+      const rowCls   = isMax ? 'row-max' : isMin ? 'row-min' : '';
+      const priceCls = isMax ? 'price-max' : isMin ? 'price-min' : '';
+      const badge    = isMax
+        ? '<span class="badge badge-high">HIGH</span>'
+        : isMin ? '<span class="badge badge-low">LOW</span>' : '';
+      const typeCls  = r.type === 'CEX' ? 'type-cex' : 'type-dex';
+
+      let spotCell = '<td class="volume">—</td>';
+      if (spotRate) {
+        const devBps = ((r.price - spotRate) / spotRate) * 10000;
+        const flagged = Math.abs(devBps) >= spotThreshold;
+        const sign    = devBps >= 0 ? '+' : '';
+        const devCls  = flagged ? (devBps > 0 ? 'dev-high' : 'dev-low') : 'volume';
+        const flag    = flagged ? ' ⚑' : '';
+        spotCell = `<td class="${devCls}">${sign}${devBps.toFixed(1)} bps${flag}</td>`;
+      }
+
+      return `
+        <tr class="${rowCls}">
+          <td>${r.name}</td>
+          <td class="${chainClass(r.chain)}">${r.chain}</td>
+          <td class="${typeCls}">${r.type}</td>
+          <td><span class="price-val ${priceCls}">${r.price.toFixed(6)}</span>${badge}</td>
+          ${spotCell}
+          <td class="volume">${fmtVol(r.volume)}</td>
+        </tr>`;
+    });
+
+    const staleRows = stale.map(r => {
+      const typeCls = r.type === 'CEX' ? 'type-cex' : 'type-dex';
+      return `
+        <tr class="row-stale">
+          <td>${r.name} <span class="badge badge-stale">STALE</span></td>
+          <td class="${chainClass(r.chain)}">${r.chain}</td>
+          <td class="${typeCls}">${r.type}</td>
+          <td><span class="price-val">${r.price.toFixed(6)}</span></td>
+          <td>—</td>
+          <td class="volume">${fmtVol(r.volume)}</td>
+        </tr>`;
+    });
+
+    tbody.innerHTML = activeRows.join('') + staleRows.join('');
+
+    // Spread summary
+    document.getElementById('sum-max').textContent    = maxP.toFixed(6);
+    document.getElementById('sum-min').textContent    = minP.toFixed(6);
+    document.getElementById('sum-spread').textContent = `${spreadBps.toFixed(1)} bps`;
+    document.getElementById('spread-summary').style.display = 'flex';
+
+    return { maxP, minP, spreadBps };
+  }
+
+  // ── Alert logic ────────────────────────────────────────────────────────────
+  function checkAlert(rows, spreadBps, maxP, minP) {
+    const banner = document.getElementById('alert-banner');
+    const active = rows.filter(r => !r.stale);
+    if (active.length < 2 || spreadBps < threshold) {
+      banner.classList.remove('active');
+      return;
+    }
+
+    const maxRow = rows.find(r => r.price === maxP);
+    const minRow = rows.find(r => r.price === minP);
+    document.getElementById('alert-text').textContent =
+      `Spread of ${spreadBps.toFixed(1)} bps exceeds threshold of ${threshold} bps`;
+    document.getElementById('alert-detail').textContent =
+      `High: ${maxRow.name} (${maxRow.chain}) @ ${maxP.toFixed(6)} — Low: ${minRow.name} (${minRow.chain}) @ ${minP.toFixed(6)}`;
+
+    const wasActive = banner.classList.contains('active');
+    banner.classList.add('active');
+
+    if (!wasActive) {
+      beep();
+      sendNotif('XSGD/USDC Spread Alert', `Spread: ${spreadBps.toFixed(1)} bps (threshold: ${threshold} bps)`);
+    }
+  }
+
+  function checkSpotAlert(rows) {
+    const banner = document.getElementById('spot-alert-banner');
+    if (!banner) return;
+    if (!spotRate) { banner.classList.remove('active'); return; }
+
+    const flagged = rows.filter(r => !r.stale && Math.abs(((r.price - spotRate) / spotRate) * 10000) >= spotThreshold);
+    if (!flagged.length) { banner.classList.remove('active'); return; }
+
+    const lines = flagged.map(r => {
+      const devBps = ((r.price - spotRate) / spotRate) * 10000;
+      const sign   = devBps >= 0 ? '+' : '';
+      return `${r.name} (${r.chain}): ${sign}${devBps.toFixed(1)} bps`;
+    });
+
+    document.getElementById('spot-alert-text').textContent =
+      `${flagged.length} pair${flagged.length > 1 ? 's' : ''} deviate from spot by ≥ ${spotThreshold} bps`;
+    document.getElementById('spot-alert-detail').textContent = lines.join('  ·  ');
+
+    const wasActive = banner.classList.contains('active');
+    banner.classList.add('active');
+    if (!wasActive) {
+      beep();
+      sendNotif('XSGD Spot Deviation Alert', lines.join('\n'));
+    }
+  }
+
+  // ── Refresh ────────────────────────────────────────────────────────────────
+  async function refresh() {
+    document.getElementById('last-updated').textContent = 'Refreshing…';
+
+    // FX fetch is independent — failure shows "Unavailable" but doesn't block the table
+    await fetchFX().catch(() => {});
+
+    try {
+      const rows = await fetchTickers();
+      lastRows = rows;
+      const result = renderTable(rows);
+      if (result) {
+        checkAlert(rows, result.spreadBps, result.maxP, result.minP);
+        checkSpotAlert(rows);
+      }
+      document.getElementById('last-updated').textContent =
+        `Last updated: ${new Date().toLocaleTimeString()}`;
+    } catch (e) {
+      console.error('[XSGD Monitor] Ticker fetch error:', e);
+      document.getElementById('table-body').innerHTML =
+        `<tr class="error-row"><td colspan="6">Error fetching prices: ${e.message}</td></tr>`;
+      document.getElementById('last-updated').textContent = 'Failed to fetch ticker data.';
+    }
+
+    startCountdown();
+  }
+
+  function startCountdown() {
+    clearInterval(countdownHandle);
+    countdownLeft = refreshSecs;
+    const el = document.getElementById('countdown');
+    const tick = () => {
+      if (countdownLeft <= 5) el.className = 'countdown soon';
+      else el.className = 'countdown';
+      el.textContent = `Next refresh in ${countdownLeft}s`;
+      countdownLeft--;
+    };
+    tick();
+    countdownHandle = setInterval(tick, 1000);
+  }
+
+  function scheduleRefresh() {
+    clearInterval(refreshHandle);
+    refreshHandle = setInterval(() => {
+      clearInterval(countdownHandle);
+      refresh();
+    }, refreshSecs * 1000);
+  }
+
+  // ── Controls ───────────────────────────────────────────────────────────────
+  const slider = document.getElementById('threshold-slider');
+  slider.addEventListener('input', () => {
+    threshold = parseInt(slider.value);
+    document.getElementById('threshold-val').textContent = `${threshold} bps`;
+    // Re-evaluate alert with current data
+    if (lastRows.length) {
+      const prices = lastRows.map(r => r.price);
+      const maxP = Math.max(...prices);
+      const minP = Math.min(...prices);
+      const spreadBps = minP > 0 ? ((maxP - minP) / minP) * 10000 : 0;
+      checkAlert(lastRows, spreadBps, maxP, minP);
+    }
+  });
+
+  document.getElementById('spot-threshold-slider').addEventListener('input', () => {
+    spotThreshold = parseInt(document.getElementById('spot-threshold-slider').value);
+    document.getElementById('spot-threshold-val').textContent = `${spotThreshold} bps`;
+    if (lastRows.length) {
+      renderTable(lastRows);
+      checkSpotAlert(lastRows);
+    }
+  });
+
+  document.getElementById('refresh-select').addEventListener('change', e => {
+    refreshSecs = parseInt(e.target.value);
+    scheduleRefresh();
+    startCountdown();
+  });
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  requestNotifPermission();
+  refresh();
+  scheduleRefresh();
+</script>
+</body>
+</html>
