@@ -140,9 +140,14 @@
 
     .control-row {
       display: flex;
-      align-items: center;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .control-top {
+      display: flex;
       justify-content: space-between;
-      gap: 0.75rem;
+      align-items: center;
     }
 
     .control-label {
@@ -150,12 +155,11 @@
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      min-width: 90px;
     }
 
     input[type="range"] {
       -webkit-appearance: none;
-      flex: 1;
+      width: 100%;
       height: 4px;
       background: var(--border);
       border-radius: 2px;
@@ -175,8 +179,6 @@
       font-size: 0.88rem;
       color: var(--accent);
       font-weight: 700;
-      min-width: 52px;
-      text-align: right;
     }
 
     select {
@@ -350,22 +352,28 @@
   <!-- Controls -->
   <div class="controls">
     <div class="control-row">
-      <span class="control-label">Spread alert</span>
+      <div class="control-top">
+        <span class="control-label">Spread alert</span>
+        <span class="threshold-val" id="threshold-val">20 bps</span>
+      </div>
       <input type="range" id="threshold-slider" min="1" max="100" value="20">
-      <span class="threshold-val" id="threshold-val">20 bps</span>
     </div>
     <div class="control-row">
-      <span class="control-label">Spot alert</span>
+      <div class="control-top">
+        <span class="control-label">Spot alert</span>
+        <span class="threshold-val" id="spot-threshold-val">20 bps</span>
+      </div>
       <input type="range" id="spot-threshold-slider" min="1" max="100" value="20">
-      <span class="threshold-val" id="spot-threshold-val">20 bps</span>
     </div>
     <div class="control-row">
-      <span class="control-label">Refresh</span>
-      <select id="refresh-select">
-        <option value="15">Every 15 s</option>
-        <option value="30" selected>Every 30 s</option>
-        <option value="60">Every 60 s</option>
-      </select>
+      <div class="control-top">
+        <span class="control-label">Refresh</span>
+        <select id="refresh-select">
+          <option value="15">Every 15 s</option>
+          <option value="30" selected>Every 30 s</option>
+          <option value="60">Every 60 s</option>
+        </select>
+      </div>
     </div>
   </div>
 
