@@ -15,7 +15,7 @@ After any edit, reopen the file or hard-refresh with **Cmd+Shift+R** (browsers c
 
 ## Git workflow
 
-Commit and push after every meaningful change:
+**Claude must commit and push after every meaningful change** — this ensures work is never lost and progress is always visible on GitHub. Use clean, concise commit messages that describe what changed and why.
 
 ```bash
 git add <files>
