@@ -503,8 +503,14 @@
   }
 
   async function fetchTickers() {
-    const res = await fetch(COINGECKO_URL);
-    if (!res.ok) throw new Error(`CoinGecko ${res.status}`);
+    let res;
+    try {
+      res = await fetch(COINGECKO_URL);
+    } catch (netErr) {
+      throw new Error(`Network error — check your connection`);
+    }
+    if (res.status === 429) throw new Error(`Rate limited by CoinGecko (429) — try again in a minute`);
+    if (!res.ok) throw new Error(`CoinGecko error ${res.status}`);
     const { tickers = [] } = await res.json();
     console.log('[XSGD Monitor] Raw tickers:', tickers);
 
