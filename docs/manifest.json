@@ -1,0 +1,18 @@
+{
+  "name": "XSGD/USDC Price Monitor",
+  "short_name": "XSGD Monitor",
+  "description": "Live XSGD/USDC prices across CEX and DEX venues",
+  "start_url": "./xsgd-monitor.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1a2e",
+  "theme_color": "#e94560",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
