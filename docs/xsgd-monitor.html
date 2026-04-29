@@ -353,7 +353,8 @@
 
 <script>
   const COINGECKO_URL = 'https://api.coingecko.com/api/v3/coins/xsgd/tickers?depth=false&include_exchange_logo=false';
-  const FX_URL = 'https://api.frankfurter.app/latest?from=USD&to=SGD';
+  const OANDA_TOKEN = '3eb69a25e2d332bfa94fb0b86e412d14-82b980708806f6549858fa908ae62223';
+  const FX_URL = 'https://api-fxpractice.oanda.com/v3/instruments/USD_SGD/candles?count=1&granularity=S5&price=M';
 
   // ── Token contract addresses (lowercase) ──────────────────────────────────
   const XSGD_ADDRS = new Set([
@@ -479,14 +480,18 @@
   // ── Fetch FX ───────────────────────────────────────────────────────────────
   async function fetchFX() {
     try {
-      const res  = await fetch(FX_URL);
+      const res  = await fetch(FX_URL, {
+        headers: { 'Authorization': `Bearer ${OANDA_TOKEN}` }
+      });
       const data = await res.json();
-      const usdSgd = data.rates?.SGD;
-      if (usdSgd) {
+      const candle = data.candles?.[0];
+      if (candle) {
+        const usdSgd = parseFloat(candle.mid.c);
         const sgdUsd = 1 / usdSgd;
         spotRate = sgdUsd;
         document.getElementById('fx-value').textContent = sgdUsd.toFixed(4);
-        document.getElementById('fx-date').textContent = `Frankfurter ECB · ${data.date || ''}`;
+        const ts = candle.time ? new Date(candle.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        document.getElementById('fx-date').textContent = `Oanda live · ${ts}`;
       }
     } catch (e) {
       document.getElementById('fx-value').innerHTML = '<span class="fx-error">Unavailable</span>';
