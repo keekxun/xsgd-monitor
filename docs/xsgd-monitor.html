@@ -651,8 +651,13 @@
       if (result) { checkAlert(rows, result.spreadBps, result.maxP, result.minP); checkSpotAlert(rows); }
       document.getElementById('last-updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
     } catch (e) {
-      document.getElementById('price-list').innerHTML = `<div class="status-msg error">Error: ${e.message}</div>`;
-      document.getElementById('last-updated').textContent = 'Fetch failed';
+      if (lastRows.length) {
+        // Keep showing last known prices — just warn in the footer
+        document.getElementById('last-updated').textContent = `⚠ ${e.message} · showing cached data`;
+      } else {
+        document.getElementById('price-list').innerHTML = `<div class="status-msg error">${e.message}</div>`;
+        document.getElementById('last-updated').textContent = 'No data';
+      }
     }
     startCountdown();
   }
