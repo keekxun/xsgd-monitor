@@ -1,5 +1,5 @@
-const CACHE = 'xsgd-monitor-v1';
-const SHELL = ['./xsgd-monitor.html', './manifest.json', './icon.svg'];
+const CACHE = 'xsgd-monitor-v2';
+const SHELL = ['./xsgd-monitor.html', './manifest.json', './arb-bot.html', './manifest-arb.json', './icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
