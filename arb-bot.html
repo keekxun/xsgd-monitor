@@ -166,6 +166,12 @@
 
     .banner-time { font-size: 0.75rem; color: #444; }
 
+    .opp-divider { border: none; border-top: 1px solid #1a3a1a; margin: 0.3rem 0; }
+    .opp-header { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .opp-spread { font-size: 1.1rem; font-weight: bold; font-family: monospace; color: #fff; }
+    .opp-pair   { font-size: 0.85rem; color: #2ecc71; }
+    .opp-min    { font-size: 0.78rem; color: #555; margin-left: auto; }
+
     /* Controls */
     .controls {
       background: #16213e;
@@ -328,37 +334,16 @@
   <div class="arb-banner" id="arb-banner">
     <div class="banner-header">
       <span class="banner-icon">⚡</span>
-      <span class="banner-title">Arb Opportunity</span>
-      <span class="banner-spread" id="banner-spread"></span>
+      <span class="banner-title">Arb Opportunities</span>
       <button class="dismiss-btn" id="dismiss-btn">Dismiss</button>
     </div>
-    <div class="banner-actions">
-      <div class="action buy">
-        <div class="action-label">Buy (cheaper)</div>
-        <div class="action-venue" id="buy-venue"></div>
-        <div class="action-chain" id="buy-chain"></div>
-        <div class="action-price" id="buy-price"></div>
-        <a class="action-link" id="buy-link" href="#" target="_blank" rel="noopener">Trade →</a>
-      </div>
-      <div class="action sell">
-        <div class="action-label">Sell (more expensive)</div>
-        <div class="action-venue" id="sell-venue"></div>
-        <div class="action-chain" id="sell-chain"></div>
-        <div class="action-price" id="sell-price"></div>
-        <a class="action-link" id="sell-link" href="#" target="_blank" rel="noopener">Trade →</a>
-      </div>
-    </div>
-    <div class="banner-note">Verify prices before executing. Typical fees: ~60 bps on Coinbase + DEX swap fee + gas.</div>
+    <div id="opportunities-list"></div>
+    <div class="banner-note">Verify live prices before executing. Thresholds reflect historical profitability after fees and slippage.</div>
     <div class="banner-time" id="banner-time"></div>
   </div>
 
   <!-- Controls -->
   <div class="controls">
-    <div class="control-group">
-      <label>Alert Threshold</label>
-      <input type="range" id="threshold-slider" min="10" max="200" value="80">
-      <span class="threshold-val" id="threshold-val">80 bps</span>
-    </div>
     <div class="control-group">
       <label>Refresh Every</label>
       <select id="refresh-select">
@@ -369,13 +354,8 @@
     </div>
   </div>
 
-  <!-- Spread summary -->
-  <div class="spread-summary" id="spread-summary" style="display:none">
-    <span>Max: <b id="sum-max">—</b></span>
-    <span>Min: <b id="sum-min">—</b></span>
-    <span>Spread: <b id="sum-spread" class="">—</b></span>
-    <span>Threshold: <b id="sum-threshold">80 bps</b></span>
-  </div>
+  <!-- Per-pair DEX spread summary -->
+  <div class="spread-summary" id="spread-summary" style="display:none"></div>
 
   <!-- Price table -->
   <div class="table-wrapper">
@@ -415,8 +395,17 @@
 
   const CEX_IDS = new Set(['gdax', 'coinbase', 'coinbase_advanced', 'coinbase_advanced_trade', 'coinbase_exchange']);
 
+  // Minimum spread (bps) for each DEX-to-DEX pair to be considered profitable
+  const PAIR_THRESHOLDS = {
+    'Polygon-Base':      15,
+    'Base-Polygon':      15,
+    'Polygon-Avalanche': 25,
+    'Avalanche-Polygon': 25,
+    'Base-Avalanche':    20,
+    'Avalanche-Base':    20,
+  };
+
   // ── State ───────────────────────────────────────────────────────────────────
-  let threshold       = 80;
   let refreshSecs     = 30;
   let countdownLeft   = 30;
   let countdownHandle = null;
@@ -531,13 +520,12 @@
     if (!rows.length) {
       tbody.innerHTML = '<tr class="error-row"><td colspan="5">No matching pairs found.</td></tr>';
       document.getElementById('spread-summary').style.display = 'none';
-      return null;
+      return;
     }
 
-    const prices    = active.map(r => r.price);
-    const maxP      = prices.length ? Math.max(...prices) : 0;
-    const minP      = prices.length ? Math.min(...prices) : 0;
-    const spreadBps = minP > 0 ? ((maxP - minP) / minP) * 10000 : 0;
+    const prices = active.map(r => r.price);
+    const maxP   = prices.length ? Math.max(...prices) : 0;
+    const minP   = prices.length ? Math.min(...prices) : 0;
 
     active.sort((a, b) => b.price - a.price);
 
@@ -573,43 +561,79 @@
 
     tbody.innerHTML = activeHtml.join('') + staleHtml.join('');
 
-    // Spread summary
-    const spreadEl = document.getElementById('sum-spread');
-    spreadEl.textContent = `${spreadBps.toFixed(1)} bps`;
-    spreadEl.className   = spreadBps >= threshold ? 'spread-live' : '';
-    document.getElementById('sum-max').textContent       = maxP.toFixed(6);
-    document.getElementById('sum-min').textContent       = minP.toFixed(6);
-    document.getElementById('sum-threshold').textContent = `${threshold} bps`;
-    document.getElementById('spread-summary').style.display = 'flex';
-
-    return { maxP, minP, spreadBps, active };
+    // Per-pair DEX spread summary
+    const dexRows = active.filter(r => r.type === 'DEX');
+    const pairLines = [];
+    for (let i = 0; i < dexRows.length; i++) {
+      for (let j = i + 1; j < dexRows.length; j++) {
+        const a = dexRows[i], b = dexRows[j];
+        const key = `${a.chain}-${b.chain}`;
+        const min = PAIR_THRESHOLDS[key];
+        if (min === undefined) continue;
+        const spread = Math.abs(a.price - b.price) / Math.min(a.price, b.price) * 10000;
+        const hot = spread >= min;
+        pairLines.push(`<span>${a.chain} / ${b.chain}: <b class="${hot ? 'spread-live' : ''}">${spread.toFixed(1)} bps</b> <span style="color:#444">(min ${min})</span></span>`);
+      }
+    }
+    const summary = document.getElementById('spread-summary');
+    summary.innerHTML  = pairLines.join('');
+    summary.style.display = pairLines.length ? 'flex' : 'none';
   }
 
   // ── Arb alert ───────────────────────────────────────────────────────────────
-  function checkArb(active, spreadBps, maxP, minP) {
-    const banner = document.getElementById('arb-banner');
+  function checkArb(rows) {
+    const banner  = document.getElementById('arb-banner');
+    const dexRows = rows.filter(r => r.type === 'DEX' && !r.stale);
+    const opps    = [];
 
-    if (active.length < 2 || spreadBps < threshold) {
-      // Spread gone — reset dismissed so next breach fires fresh
+    for (let i = 0; i < dexRows.length; i++) {
+      for (let j = i + 1; j < dexRows.length; j++) {
+        const a   = dexRows[i], b = dexRows[j];
+        const key = `${a.chain}-${b.chain}`;
+        const min = PAIR_THRESHOLDS[key];
+        if (min === undefined) continue;
+        const spreadBps = Math.abs(a.price - b.price) / Math.min(a.price, b.price) * 10000;
+        if (spreadBps >= min) {
+          const buyRow  = a.price <= b.price ? a : b;
+          const sellRow = a.price <= b.price ? b : a;
+          opps.push({ buyRow, sellRow, spreadBps, min });
+        }
+      }
+    }
+
+    if (!opps.length) {
       dismissed = false;
       banner.classList.remove('active');
       return;
     }
 
-    // Always update banner content (prices may have shifted)
-    const sellRow = active.find(r => r.price === maxP);
-    const buyRow  = active.find(r => r.price === minP);
+    // Sort by margin above threshold (most profitable first)
+    opps.sort((a, b) => (b.spreadBps - b.min) - (a.spreadBps - a.min));
 
-    document.getElementById('banner-spread').textContent = `${spreadBps.toFixed(1)} bps spread`;
-    document.getElementById('buy-venue').textContent     = buyRow.name;
-    document.getElementById('buy-chain').textContent     = buyRow.chain !== '—' ? buyRow.chain : '';
-    document.getElementById('buy-price').textContent     = buyRow.price.toFixed(6);
-    document.getElementById('buy-link').href             = buyRow.tradeUrl || '#';
-
-    document.getElementById('sell-venue').textContent    = sellRow.name;
-    document.getElementById('sell-chain').textContent    = sellRow.chain !== '—' ? sellRow.chain : '';
-    document.getElementById('sell-price').textContent    = sellRow.price.toFixed(6);
-    document.getElementById('sell-link').href            = sellRow.tradeUrl || '#';
+    document.getElementById('opportunities-list').innerHTML = opps.map((opp, idx) => `
+      ${idx > 0 ? '<hr class="opp-divider">' : ''}
+      <div class="opp-header">
+        <span class="opp-spread">${opp.spreadBps.toFixed(1)} bps</span>
+        <span class="opp-pair">${opp.buyRow.chain} → ${opp.sellRow.chain}</span>
+        <span class="opp-min">min: ${opp.min} bps</span>
+      </div>
+      <div class="banner-actions">
+        <div class="action buy">
+          <div class="action-label">Buy (cheaper)</div>
+          <div class="action-venue">${opp.buyRow.name}</div>
+          <div class="action-chain">${opp.buyRow.chain}</div>
+          <div class="action-price">${opp.buyRow.price.toFixed(6)}</div>
+          <a class="action-link" href="${opp.buyRow.tradeUrl || '#'}" target="_blank" rel="noopener">Trade →</a>
+        </div>
+        <div class="action sell">
+          <div class="action-label">Sell (more expensive)</div>
+          <div class="action-venue">${opp.sellRow.name}</div>
+          <div class="action-chain">${opp.sellRow.chain}</div>
+          <div class="action-price">${opp.sellRow.price.toFixed(6)}</div>
+          <a class="action-link" href="${opp.sellRow.tradeUrl || '#'}" target="_blank" rel="noopener">Trade →</a>
+        </div>
+      </div>
+    `).join('');
 
     if (!dismissed) {
       const wasActive = banner.classList.contains('active');
@@ -628,9 +652,9 @@
     await fetchFX().catch(() => {});
 
     try {
-      const rows   = await fetchTickers();
-      const result = renderTable(rows);
-      if (result) checkArb(result.active, result.spreadBps, result.maxP, result.minP);
+      const rows = await fetchTickers();
+      renderTable(rows);
+      checkArb(rows);
       document.getElementById('last-updated').textContent =
         `Last updated: ${new Date().toLocaleTimeString()}`;
     } catch (e) {
@@ -664,12 +688,6 @@
   document.getElementById('dismiss-btn').addEventListener('click', () => {
     dismissed = true;
     document.getElementById('arb-banner').classList.remove('active');
-  });
-
-  document.getElementById('threshold-slider').addEventListener('input', e => {
-    threshold = parseInt(e.target.value);
-    document.getElementById('threshold-val').textContent = `${threshold} bps`;
-    document.getElementById('sum-threshold').textContent = `${threshold} bps`;
   });
 
   document.getElementById('refresh-select').addEventListener('change', e => {
