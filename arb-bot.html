@@ -267,6 +267,7 @@
     .price-val { font-family: monospace; font-size: 1rem; font-weight: bold; }
     .price-max { color: #2ecc71; }
     .price-min { color: #e74c3c; }
+    .price-sub { display: block; font-size: 0.72rem; color: #666; font-family: monospace; margin-top: 2px; }
 
     .badge {
       display: inline-block;
@@ -382,10 +383,11 @@
 </div>
 
 <script>
-  const COINGECKO_URL   = 'https://api.coingecko.com/api/v3/coins/xsgd/tickers?depth=false&include_exchange_logo=false';
-  const OANDA_TOKEN     = '3eb69a25e2d332bfa94fb0b86e412d14-82b980708806f6549858fa908ae62223';
-  const FX_URL          = 'https://api-fxpractice.oanda.com/v3/instruments/USD_SGD/candles?count=1&granularity=S5&price=M';
-  const COINBASE_URL = 'https://www.coinbase.com/advanced-trade/spot/XSGD-USDC';
+  const OANDA_TOKEN       = '3eb69a25e2d332bfa94fb0b86e412d14-82b980708806f6549858fa908ae62223';
+  const FX_URL            = 'https://api-fxpractice.oanda.com/v3/instruments/USD_SGD/candles?count=1&granularity=S5&price=M';
+  const COINBASE_URL      = 'https://www.coinbase.com/advanced-trade/spot/XSGD-USDC';
+  const COINBASE_BOOK_URL = 'https://api.exchange.coinbase.com/products/XSGD-USDC/book?level=2';
+  const TRADE_SIZE_USDC   = 10000;
 
   const DEX_POOLS = [
     { chain: 'polygon',   address: '0x9bcef8ddd75817e66e01a5af313c776c74319394', name: 'Uniswap V3', display: 'Polygon'   },
@@ -393,7 +395,6 @@
     { chain: 'avalanche', address: '0x2b69e592cddfad48a93eba25e6d2709a6c077a1a', name: 'Uniswap V3', display: 'Avalanche' },
   ];
 
-  const CEX_IDS = new Set(['gdax', 'coinbase', 'coinbase_advanced', 'coinbase_advanced_trade', 'coinbase_exchange']);
 
   // Minimum spread (bps) for each DEX-to-DEX pair to be considered profitable
   const PAIR_THRESHOLDS = {
@@ -430,6 +431,25 @@
     } catch (_) {}
   }
 
+  // ── Order book walker ───────────────────────────────────────────────────────
+  // Walks bid or ask levels and returns the effective USDC/XSGD price for a
+  // given USDC trade size (buy or sell direction is symmetric in USDC terms).
+  function walkBook(levels, tradeUSDC) {
+    let remaining = tradeUSDC;
+    let xsgd = 0, usdc = 0;
+    for (const [priceStr, sizeStr] of levels) {
+      const p = parseFloat(priceStr);
+      const s = parseFloat(sizeStr);
+      if (!p || !s) continue;
+      const fill = Math.min(s * p, remaining);
+      xsgd += fill / p;
+      usdc += fill;
+      remaining -= fill;
+      if (remaining <= 0) break;
+    }
+    return xsgd > 0 ? usdc / xsgd : null;
+  }
+
   // ── Fetch FX ────────────────────────────────────────────────────────────────
   async function fetchFX() {
     try {
@@ -449,8 +469,8 @@
 
   // ── Fetch tickers ───────────────────────────────────────────────────────────
   async function fetchTickers() {
-    const [cgRes, ...dsParsed] = await Promise.all([
-      fetch(COINGECKO_URL),
+    const [cbRes, ...dsParsed] = await Promise.all([
+      fetch(COINBASE_BOOK_URL).then(r => r.ok ? r.json() : null).catch(() => null),
       ...DEX_POOLS.map(pool =>
         fetch(`https://api.dexscreener.com/latest/dex/pairs/${pool.chain}/${pool.address}`)
           .then(r => r.ok ? r.json() : null)
@@ -460,20 +480,22 @@
 
     const rows = [];
 
-    // Coinbase price from CoinGecko
-    if (cgRes.ok) {
-      const cgData = await cgRes.json();
-      for (const t of (cgData.tickers || [])) {
-        const id = (t.market.identifier || '').toLowerCase();
-        if (!(CEX_IDS.has(id) || id.startsWith('coinbase'))) continue;
-        const b   = (t.base   || '').toLowerCase();
-        const tgt = (t.target || '').toLowerCase();
-        let price = null;
-        if (b === 'xsgd' && (tgt === 'usdc' || tgt === 'usd')) price = t.last;
-        if (tgt === 'xsgd' && (b === 'usdc' || b === 'usd') && t.last > 0) price = 1 / t.last;
-        if (!price || price <= 0) continue;
-        rows.push({ name: 'Coinbase', chain: '—', type: 'CEX', price, volume: t.volume || 0, stale: t.is_stale, tradeUrl: COINBASE_URL });
-        break;
+    // Coinbase effective prices from order book (10k USDC trade size)
+    if (cbRes) {
+      const effectiveAsk = walkBook(cbRes.asks, TRADE_SIZE_USDC);
+      const effectiveBid = walkBook(cbRes.bids, TRADE_SIZE_USDC);
+      if (effectiveAsk && effectiveBid) {
+        rows.push({
+          name: 'Coinbase',
+          chain: '—',
+          type: 'CEX',
+          price: (effectiveAsk + effectiveBid) / 2,
+          effectiveAsk,
+          effectiveBid,
+          volume: null,
+          stale: false,
+          tradeUrl: COINBASE_URL,
+        });
       }
     }
 
@@ -537,12 +559,15 @@
         ? '<span class="badge badge-high">HIGH</span>'
         : isMin ? '<span class="badge badge-low">LOW</span>' : '';
       const typeCls  = r.type === 'CEX' ? 'type-cex' : 'type-dex';
+      const priceCell = r.type === 'CEX'
+        ? `<span class="price-val ${priceCls}">${r.price.toFixed(6)}</span>${badge}<span class="price-sub">bid ${r.effectiveBid.toFixed(6)} · ask ${r.effectiveAsk.toFixed(6)}</span>`
+        : `<span class="price-val ${priceCls}">${r.price.toFixed(6)}</span>${badge}`;
       return `
         <tr>
           <td>${r.name}</td>
           <td class="${chainClass(r.chain)}">${r.chain}</td>
           <td class="${typeCls}">${r.type}</td>
-          <td><span class="price-val ${priceCls}">${r.price.toFixed(6)}</span>${badge}</td>
+          <td>${priceCell}</td>
           <td class="volume">${fmtVol(r.volume)}</td>
         </tr>`;
     });
