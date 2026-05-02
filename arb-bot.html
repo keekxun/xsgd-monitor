@@ -406,6 +406,13 @@
     'Avalanche-Base':    20,
   };
 
+  // Minimum spread (bps) for Coinbase vs each DEX chain to be considered profitable
+  const CEX_THRESHOLDS = {
+    'Base':      10,
+    'Polygon':   15,
+    'Avalanche': 20,
+  };
+
   // ── State ───────────────────────────────────────────────────────────────────
   let refreshSecs     = 30;
   let countdownLeft   = 30;
@@ -586,9 +593,11 @@
 
     tbody.innerHTML = activeHtml.join('') + staleHtml.join('');
 
-    // Per-pair DEX spread summary
+    // Per-pair spread summary (DEX-DEX and CEX-DEX)
     const dexRows = active.filter(r => r.type === 'DEX');
+    const cexRow  = active.find(r => r.type === 'CEX');
     const pairLines = [];
+
     for (let i = 0; i < dexRows.length; i++) {
       for (let j = i + 1; j < dexRows.length; j++) {
         const a = dexRows[i], b = dexRows[j];
@@ -600,6 +609,19 @@
         pairLines.push(`<span>${a.chain} / ${b.chain}: <b class="${hot ? 'spread-live' : ''}">${spread.toFixed(1)} bps</b> <span style="color:#444">(min ${min})</span></span>`);
       }
     }
+
+    if (cexRow) {
+      for (const dex of dexRows) {
+        const min = CEX_THRESHOLDS[dex.chain];
+        if (min === undefined) continue;
+        const buyOnCex  = (dex.price - cexRow.effectiveAsk) / cexRow.effectiveAsk * 10000;
+        const sellOnCex = (cexRow.effectiveBid - dex.price) / dex.price * 10000;
+        const spread    = Math.max(buyOnCex, sellOnCex);
+        const hot       = spread >= min;
+        pairLines.push(`<span>Coinbase / ${dex.chain}: <b class="${hot ? 'spread-live' : ''}">${spread.toFixed(1)} bps</b> <span style="color:#444">(min ${min})</span></span>`);
+      }
+    }
+
     const summary = document.getElementById('spread-summary');
     summary.innerHTML  = pairLines.join('');
     summary.style.display = pairLines.length ? 'flex' : 'none';
@@ -609,8 +631,10 @@
   function checkArb(rows) {
     const banner  = document.getElementById('arb-banner');
     const dexRows = rows.filter(r => r.type === 'DEX' && !r.stale);
+    const cexRow  = rows.find(r => r.type === 'CEX');
     const opps    = [];
 
+    // DEX-to-DEX opportunities
     for (let i = 0; i < dexRows.length; i++) {
       for (let j = i + 1; j < dexRows.length; j++) {
         const a   = dexRows[i], b = dexRows[j];
@@ -622,6 +646,36 @@
           const buyRow  = a.price <= b.price ? a : b;
           const sellRow = a.price <= b.price ? b : a;
           opps.push({ buyRow, sellRow, spreadBps, min });
+        }
+      }
+    }
+
+    // Coinbase-to-DEX opportunities (uses effective ask/bid from order book)
+    if (cexRow) {
+      for (const dex of dexRows) {
+        const min = CEX_THRESHOLDS[dex.chain];
+        if (min === undefined) continue;
+
+        // DEX price > Coinbase effective ask → buy on Coinbase, sell on DEX
+        const buyOnCex = (dex.price - cexRow.effectiveAsk) / cexRow.effectiveAsk * 10000;
+        if (buyOnCex >= min) {
+          opps.push({
+            buyRow:  { ...cexRow, price: cexRow.effectiveAsk },
+            sellRow: dex,
+            spreadBps: buyOnCex,
+            min,
+          });
+        }
+
+        // DEX price < Coinbase effective bid → buy on DEX, sell on Coinbase
+        const sellOnCex = (cexRow.effectiveBid - dex.price) / dex.price * 10000;
+        if (sellOnCex >= min) {
+          opps.push({
+            buyRow:  dex,
+            sellRow: { ...cexRow, price: cexRow.effectiveBid },
+            spreadBps: sellOnCex,
+            min,
+          });
         }
       }
     }
