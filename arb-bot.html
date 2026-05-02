@@ -402,86 +402,14 @@
 </div>
 
 <script>
-  const COINGECKO_URL = 'https://api.coingecko.com/api/v3/coins/xsgd/tickers?depth=false&include_exchange_logo=false';
-  const OANDA_TOKEN   = '3eb69a25e2d332bfa94fb0b86e412d14-82b980708806f6549858fa908ae62223';
-  const FX_URL        = 'https://api-fxpractice.oanda.com/v3/instruments/USD_SGD/candles?count=1&granularity=S5&price=M';
-  const COINBASE_URL  = 'https://www.coinbase.com/advanced-trade/spot/XSGD-USDC';
-
-  const XSGD_ADDRS = new Set([
-    '0xdc3326e71d45186f113a2f448984ca0e8d201995',
-    '0x0a4c9cb2778ab3302996a34befcf9a8bc288c33b',
-    '0xb2f85b7ab3c2b6f62df06de6ae7d09c010a5096e',
-    '0x70e8de73ce538da2beed35d14187f6959a8eca96',
-  ]);
-
-  const USDC_ADDRS = new Set([
-    '0x2791bca1f2de4661ed88a30c99a7a9449aa84174',
-    '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359',
-    '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
-    '0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e',
-  ]);
+  const COINGECKO_URL   = 'https://api.coingecko.com/api/v3/coins/xsgd/tickers?depth=false&include_exchange_logo=false';
+  const OANDA_TOKEN     = '3eb69a25e2d332bfa94fb0b86e412d14-82b980708806f6549858fa908ae62223';
+  const FX_URL          = 'https://api-fxpractice.oanda.com/v3/instruments/USD_SGD/candles?count=1&granularity=S5&price=M';
+  const COINBASE_URL    = 'https://www.coinbase.com/advanced-trade/spot/XSGD-USDC';
+  const DEXSCREENER_URL = 'https://api.dexscreener.com/latest/dex/pairs/polygon/0x9bcef8ddd75817e66e01a5af313c776c74319394';
+  const DEXSCREENER_TRADE_URL = 'https://dexscreener.com/polygon/0x9bcef8ddd75817e66e01a5af313c776c74319394';
 
   const CEX_IDS = new Set(['gdax', 'coinbase', 'coinbase_advanced', 'coinbase_advanced_trade', 'coinbase_exchange']);
-
-  const KNOWN_DEX = {
-    'aerodrome-slipstream':           { name: 'Aerodrome SlipStream', chain: 'Base' },
-    'aerodrome_slipstream':           { name: 'Aerodrome SlipStream', chain: 'Base' },
-    'uniswap_v3_polygon_pos':         { name: 'Uniswap V3',           chain: 'Polygon' },
-    'uniswap-v3-polygon':             { name: 'Uniswap V3',           chain: 'Polygon' },
-    'uniswap-v3-avalanche':           { name: 'Uniswap V3',           chain: 'Avalanche' },
-    'uniswap_v3_avalanche':           { name: 'Uniswap V3',           chain: 'Avalanche' },
-    'uniswap-v3-base':                { name: 'Uniswap V3',           chain: 'Base' },
-    'uniswap_v3_base':                { name: 'Uniswap V3',           chain: 'Base' },
-    'pharaoh-exchange-v1':            { name: 'Pharaoh Exchange',      chain: 'Avalanche' },
-    'pharaoh-exchange-v2':            { name: 'Pharaoh Exchange',      chain: 'Avalanche' },
-    'pharaoh-exchange-v3':            { name: 'Pharaoh Exchange V3',   chain: 'Avalanche' },
-    'pharaoh_exchange':               { name: 'Pharaoh Exchange',      chain: 'Avalanche' },
-    'pancakeswap-infinity-clmm-base': { name: 'PancakeSwap Infinity',  chain: 'Base' },
-    'pancakeswap_new':                { name: 'PancakeSwap Infinity',  chain: 'Base' },
-    'quickswap_v3':                   { name: 'QuickSwap V3',          chain: 'Polygon' },
-    'quickswap-v3':                   { name: 'QuickSwap V3',          chain: 'Polygon' },
-  };
-
-  const TARGET_CHAINS = new Set(['Base', 'Polygon', 'Avalanche']);
-
-  function detectChain(url) {
-    if (!url) return null;
-    const u = url.toLowerCase();
-    if (u.includes('polygon')   || u.includes('/137/')   || u.includes('chain=137'))   return 'Polygon';
-    if (u.includes('avalanche') || u.includes('/43114/') || u.includes('chain=43114') || u.includes('avax')) return 'Avalanche';
-    if (u.includes('/base')     || u.includes('base.org') || u.includes('/8453/')  || u.includes('chain=8453') || u.includes('aerodrome')) return 'Base';
-    return null;
-  }
-
-  function resolveExchange(ticker) {
-    const id  = (ticker.market.identifier || '').toLowerCase();
-    const url = ticker.trade_url || ticker.token_info_url || '';
-
-    if (CEX_IDS.has(id) || id.startsWith('coinbase')) {
-      return { name: 'Coinbase', chain: '—', type: 'CEX', tradeUrl: COINBASE_URL };
-    }
-    if (KNOWN_DEX[id]) {
-      return { ...KNOWN_DEX[id], type: 'DEX', tradeUrl: url };
-    }
-    const chain = detectChain(url);
-    if (chain && TARGET_CHAINS.has(chain)) {
-      const name = id.includes('uniswap') ? 'Uniswap V3' : ticker.market.name;
-      return { name, chain, type: 'DEX', tradeUrl: url };
-    }
-    return null;
-  }
-
-  function getPrice(ticker) {
-    const b = (ticker.base   || '').toLowerCase();
-    const t = (ticker.target || '').toLowerCase();
-    const bIsXsgd = b === 'xsgd' || XSGD_ADDRS.has(b);
-    const tIsXsgd = t === 'xsgd' || XSGD_ADDRS.has(t);
-    const bIsUsdc = b === 'usdc' || b === 'usd' || USDC_ADDRS.has(b);
-    const tIsUsdc = t === 'usdc' || t === 'usd' || USDC_ADDRS.has(t);
-    if (bIsXsgd && tIsUsdc) return ticker.last;
-    if (tIsXsgd && bIsUsdc && ticker.last > 0) return 1 / ticker.last;
-    return null;
-  }
 
   // ── State ───────────────────────────────────────────────────────────────────
   let threshold       = 80;
@@ -528,35 +456,45 @@
 
   // ── Fetch tickers ───────────────────────────────────────────────────────────
   async function fetchTickers() {
-    const res  = await fetch(COINGECKO_URL);
-    if (!res.ok) throw new Error(`CoinGecko ${res.status}`);
-    const data = await res.json();
+    const [cgRes, dsRes] = await Promise.all([
+      fetch(COINGECKO_URL),
+      fetch(DEXSCREENER_URL),
+    ]);
 
-    const seen = new Map();
     const rows = [];
 
-    for (const t of (data.tickers || [])) {
-      const exch = resolveExchange(t);
-      if (!exch) continue;
-      if (exch.type === 'DEX' && !TARGET_CHAINS.has(exch.chain)) continue;
-
-      const price = getPrice(t);
-      if (price === null || price <= 0) continue;
-
-      const key = `${exch.name}|${exch.chain}`;
-      if (seen.has(key)) {
-        if ((t.volume || 0) > seen.get(key).volume) {
-          seen.get(key).price    = price;
-          seen.get(key).volume   = t.volume || 0;
-          seen.get(key).stale    = t.is_stale;
-          seen.get(key).tradeUrl = exch.tradeUrl || seen.get(key).tradeUrl;
-        }
-        continue;
+    // Coinbase price from CoinGecko
+    if (cgRes.ok) {
+      const cgData = await cgRes.json();
+      for (const t of (cgData.tickers || [])) {
+        const id = (t.market.identifier || '').toLowerCase();
+        if (!(CEX_IDS.has(id) || id.startsWith('coinbase'))) continue;
+        const b = (t.base   || '').toLowerCase();
+        const tgt = (t.target || '').toLowerCase();
+        let price = null;
+        if (b === 'xsgd' && (tgt === 'usdc' || tgt === 'usd')) price = t.last;
+        if (tgt === 'xsgd' && (b === 'usdc' || b === 'usd') && t.last > 0) price = 1 / t.last;
+        if (!price || price <= 0) continue;
+        rows.push({ name: 'Coinbase', chain: '—', type: 'CEX', price, volume: t.volume || 0, stale: t.is_stale, tradeUrl: COINBASE_URL });
+        break;
       }
+    }
 
-      const row = { ...exch, price, volume: t.volume || 0, stale: t.is_stale };
-      seen.set(key, row);
-      rows.push(row);
+    // Uniswap V3 Polygon pool from DexScreener
+    if (dsRes.ok) {
+      const dsData = await dsRes.json();
+      const pair   = dsData.pairs?.[0];
+      if (pair) {
+        const base  = (pair.baseToken?.symbol  || '').toUpperCase();
+        const quote = (pair.quoteToken?.symbol || '').toUpperCase();
+        const raw   = parseFloat(pair.priceNative);
+        let price   = null;
+        if (base === 'XSGD' && (quote === 'USDC' || quote === 'USD')) price = raw;
+        if (quote === 'XSGD' && (base === 'USDC' || base === 'USD') && raw > 0) price = 1 / raw;
+        if (price && price > 0) {
+          rows.push({ name: 'Uniswap V3', chain: 'Polygon', type: 'DEX', price, volume: pair.volume?.h24 || 0, stale: false, tradeUrl: DEXSCREENER_TRADE_URL });
+        }
+      }
     }
 
     return rows;
