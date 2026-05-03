@@ -1,5 +1,5 @@
-const CACHE = 'xsgd-monitor-v2';
-const SHELL = ['./xsgd-monitor.html', './manifest.json', './arb-bot.html', './manifest-arb.json', './icon.svg'];
+const CACHE = 'xsgd-monitor-v3';
+const SHELL = ['./xsgd-monitor.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
@@ -16,7 +16,6 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Let API calls go through — always want live data
   const url = e.request.url;
   if (url.includes('coingecko.com') || url.includes('oanda.com')) return;
 
